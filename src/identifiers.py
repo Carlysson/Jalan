@@ -24,19 +24,13 @@ def _symbol_class(char):
 
 
 START = "q0"
-ACEPTING = {"q1"}
-DEAD = {"qe"}
+ACCEPTING = {"q1"}
+DEAD = "qe"
 
 TRANSITIONS = {
-    ("q0", "L"): "q1",
-    ("q0", "D"): "qe",
-    ("q0", "O"): "qe",
-    ("q1", "L"): "q1",
-    ("q1", "D"): "q1",
-    ("q1", "O"): "qe",
-    ("qe", "L"): "qe",
-    ("qe", "D"): "qe",
-    ("qe", "O"): "qe",
+    "q0": {"L": "q1", "D": DEAD, "O": DEAD},
+    "q1": {"L": "q1", "D": "q1", "O": DEAD},
+    "qe": {"L": DEAD, "D": DEAD, "O": DEAD},
 }
 
 
