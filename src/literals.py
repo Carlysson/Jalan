@@ -1,8 +1,14 @@
 
-"""Reconhecimento de números, strings e literais booleanos."""
+"""Reconhecimento de números, strings e literais booleanos.
 
+Todos os autômatos utilizam o mesmo executor (_run_afd).
+Cada AFD possui tabela de transições, estados de aceitação,
+função de classificação de caracteres e estado inicial.
+"""
 
-# Os tipos de tokens
+from dataclasses import dataclass
+from string import ascii_letters, digits
+from typing import Callable, NamedTuple, Optional
 
 
 INTEGER_LITERAL = "INTEGER_LITERAL"
@@ -10,100 +16,144 @@ DECIMAL_LITERAL = "DECIMAL_LITERAL"
 STRING_LITERAL = "STRING_LITERAL"
 BOOLEAN_LITERAL = "BOOLEAN_LITERAL"
 
-
-# Classe de Caracteres que serão utilizados
-
-DIGITS = set("0123456789")
-LETTERS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-IDENTIFIER_CHARS = LETTERS | DIGITS | {"_"}
+DIGITS = frozenset(digits)
+IDENTIFIER_CHARS = frozenset(ascii_letters + digits + "_")
+VALID_ESCAPES = frozenset('"\\ntr')
 
 
-def _number_class(char):
+def _number_class(_state, char):
     if char in DIGITS:
         return "D"
-    elif char == ".":
+    if char == ".":
         return "DOT"
-    return "O"
+    return "OTHER"
 
 
-def _string_class(char):
+def _string_class(state, char):
+    if state == "q2":
+        return "ESC_VALID" if char in VALID_ESCAPES else "ESC_INVALID"
+
     if char == '"':
         return "QUOTE"
-    elif char == "\\":
+    if char == "\\":
         return "BACKSLASH"
-    elif char in ("\n", "\r"):
+    if char in "\r\n":
         return "NEWLINE"
+
     return "CHAR"
 
 
-def _is_identifier_continue(char):
-    return char in IDENTIFIER_CHARS
+def _boolean_class(_state, char):
+    return char
 
 
-# AFD dos números inteiros
+@dataclass(frozen=True)
+class AFD:
+    transitions: dict
+    accepting: frozenset
+    classify: Callable[[str, str], str]
+    start: str = "q0"
 
 
-INTEGER_START = "q0"
-INTEGER_ACCEPTING = {"q1"}
-
-INTEGER_TRANSITIONS = {
-    ("q0", "D"): "q1",
-    ("q1", "D"): "q1",
-}
-
-# AFD dos números decimais
+# AFD dos inteiros
 
 
-DECIMAL_START = "q0"
-DECIMAL_ACCEPTING = {"q3"}
-
-DECIMAL_TRANSITIONS = {
-    ("q0", "D"): "q1",
-    ("q1", "D"): "q1",
-    ("q1", "DOT"): "q2",
-    ("q2", "D"): "q3",
-    ("q3", "D"): "q3",
-}
-
-# AFD das Strings (com escape)
+INTEGER_AFD = AFD(
+    transitions={
+        ("q0", "D"): "q1",
+        ("q1", "D"): "q1",
+    },
+    accepting=frozenset({"q1"}),
+    classify=_number_class,
+)
 
 
-STRING_START = "q0"
-STRING_ACCEPTING = {"qf"}
 
-STRING_TRANSITIONS = {
-    ("q0", "QUOTE"): "q1",
-    ("q1", "CHAR"): "q1",
-    ("q1", "BACKSLASH"): "q2",
-    ("q1", "QUOTE"): "qf",
-    ("q2", '"'): "q1",
-    ("q2", "\\"): "q1",
-    ("q2", "n"): "q1",
-    ("q2", "t"): "q1",
-    ("q2", "r"): "q1",
-}
+# AFD dos Decimais
 
 
-# AFD dos Booleanos
+DECIMAL_AFD = AFD(
+    transitions={
+        ("q0", "D"): "q1",
+        ("q1", "D"): "q1",
+        ("q1", "DOT"): "q2",
+        ("q2", "D"): "q3",
+        ("q3", "D"): "q3",
+    },
+    accepting=frozenset({"q3"}),
+    classify=_number_class,
+)
 
 
-BOOLEAN_START = "q0"
-BOOLEAN_ACCEPTING = {"qf"}
 
-BOOLEAN_TRANSITIONS = {
-    ("q0", "t"): "q1",
-    ("q1", "r"): "q2",
-    ("q2", "u"): "q3",
-    ("q3", "e"): "qf",
+# AFD das Strings
 
-    ("q0", "f"): "q4",
-    ("q4", "a"): "q5",
-    ("q5", "l"): "q6",
-    ("q6", "s"): "q7",
-    ("q7", "e"): "qf",
-}
 
-# Funções auziliares
+STRING_AFD = AFD(
+    transitions={
+        ("q0", "QUOTE"): "q1",
+        ("q1", "CHAR"): "q1",
+        ("q1", "BACKSLASH"): "q2",
+        ("q1", "QUOTE"): "qf",
+        ("q2", "ESC_VALID"): "q1",
+    },
+    accepting=frozenset({"qf"}),
+    classify=_string_class,
+)
+
+
+# AFD dos booleanos
+
+
+BOOLEAN_AFD = AFD(
+    transitions={
+        ("q0", "t"): "q1",
+        ("q1", "r"): "q2",
+        ("q2", "u"): "q3",
+        ("q3", "e"): "qf",
+
+        ("q0", "f"): "q4",
+        ("q4", "a"): "q5",
+        ("q5", "l"): "q6",
+        ("q6", "s"): "q7",
+        ("q7", "e"): "qf",
+    },
+    accepting=frozenset({"qf"}),
+    classify=_boolean_class,
+)
+
+# Executor genérico dos AFDs
+
+
+class RunResult(NamedTuple):
+    state: str
+    accept_end: Optional[int]
+
+
+def _run_afd(afd: AFD, source: str, position: int) -> RunResult:
+    state = afd.start
+    i = position
+
+    last_accept = i if state in afd.accepting else None
+
+    while i < len(source):
+        char_class = afd.classify(state, source[i])
+
+        next_state = afd.transitions.get((state, char_class))
+
+        if next_state is None:
+            break
+
+        state = next_state
+        i += 1
+
+        if state in afd.accepting:
+            last_accept = i
+
+    return RunResult(state, last_accept)
+
+
+# Funções auxiliares
 
 
 def _token(type_, value, line, column):
@@ -111,199 +161,113 @@ def _token(type_, value, line, column):
         "type": type_,
         "value": value,
         "line": line,
-        "column": column
+        "column": column,
     }
 
 
-def _run_afd(source, position, start, accepting,
-             transitions, classify):
-
-    state = start
-    i = position
-    last_accept = None
-
-    if state in accepting:
-        last_accept = i
-
-    while i < len(source):
-        char_class = classify(source[i])
-        next_state = transitions.get((state, char_class))
-
-        if next_state is None:
-            break
-
-        state = next_state
-        i += 1
-
-        if state in accepting:
-            last_accept = i
-
-    return state, i, last_accept
+def _ends_cleanly(source, end, forbidden=IDENTIFIER_CHARS):
+    return end >= len(source) or source[end] not in forbidden
 
 
-# Reconhecimento dos inteiros e decimais
+def _build(type_, source, position, end, line, column):
+    return (
+        _token(type_, source[position:end], line, column),
+        end - position,
+    )
+
+
+# Reconhecimento dos Números
+
+
+NUMBER_FORBIDDEN_AFTER = IDENTIFIER_CHARS | {"."}
 
 
 def _recognize_number(source, position, line, column):
+    result = _run_afd(DECIMAL_AFD, source, position)
 
-    decimal_state, decimal_end, decimal_accept = _run_afd(
-        source,
-        position,
-        DECIMAL_START,
-        DECIMAL_ACCEPTING,
-        DECIMAL_TRANSITIONS,
-        _number_class
-    )
+    if result.accept_end is not None:
+        end = result.accept_end
 
-    has_decimal_point = (
-        decimal_state == "q2"
-        or (
-            decimal_end < len(source)
-            and source[decimal_end] == "."
-            and decimal_state == "q1"
-        )
-    )
-
-    if has_decimal_point:
-        if decimal_accept is None:
+        if not _ends_cleanly(source, end, NUMBER_FORBIDDEN_AFTER):
             return None
 
-        end = decimal_accept
-
-        if end < len(source):
-            if (
-                _is_identifier_continue(source[end])
-                or source[end] == "."
-            ):
-                return None
-
-        value = source[position:end]
-
-        return (
-            _token(DECIMAL_LITERAL, value, line, column),
-            end - position
+        return _build(
+            DECIMAL_LITERAL, source, position, end, line, column
         )
 
-    integer_state, integer_end, integer_accept = _run_afd(
-        source,
-        position,
-        INTEGER_START,
-        INTEGER_ACCEPTING,
-        INTEGER_TRANSITIONS,
-        _number_class
-    )
-
-    if integer_accept is None:
+    if result.state == "q2":
         return None
 
-    end = integer_accept
+    result = _run_afd(INTEGER_AFD, source, position)
 
-    if end < len(source):
-        if (
-            _is_identifier_continue(source[end])
-            or source[end] == "."
-        ):
-            return None
+    if result.accept_end is None:
+        return None
 
-    value = source[position:end]
+    end = result.accept_end
 
-    return (
-        _token(INTEGER_LITERAL, value, line, column),
-        end - position
+    if not _ends_cleanly(source, end, NUMBER_FORBIDDEN_AFTER):
+        return None
+
+    return _build(
+        INTEGER_LITERAL, source, position, end, line, column
     )
-
 
 
 # Reconhecimento das Strings
 
 
 def _recognize_string(source, position, line, column):
+    result = _run_afd(STRING_AFD, source, position)
 
-    state = STRING_START
-    i = position
+    end = result.accept_end
 
-    while i < len(source):
-        char = source[i]
-        char_class = _string_class(char)
+    if end is None:
+        return None
 
-        if state == "q2":
-            next_state = STRING_TRANSITIONS.get((state, char))
-        else:
-            next_state = STRING_TRANSITIONS.get((state, char_class))
-
-        if next_state is None:
-            return None
-
-        state = next_state
-        i += 1
-
-        if state in STRING_ACCEPTING:
-            value = source[position:i]
-
-            return (
-                _token(STRING_LITERAL, value, line, column),
-                i - position
-            )
-
-    return None
+    return _build(
+        STRING_LITERAL, source, position, end, line, column
+    )
 
 
-# Reconhecimento dos Booleanos
+# Reconhecimento dos booleanos
 
 
 def _recognize_boolean(source, position, line, column):
+    result = _run_afd(BOOLEAN_AFD, source, position)
 
-    state = BOOLEAN_START
-    i = position
+    end = result.accept_end
 
-    while i < len(source):
-        char = source[i]
-        next_state = BOOLEAN_TRANSITIONS.get((state, char))
+    if end is None:
+        return None
 
-        if next_state is None:
-            break
+    if not _ends_cleanly(source, end):
+        return None
 
-        state = next_state
-        i += 1
+    return _build(
+        BOOLEAN_LITERAL, source, position, end, line, column
+    )
 
-        if state in BOOLEAN_ACCEPTING:
-
-            if i < len(source):
-                if _is_identifier_continue(source[i]):
-                    return None
-
-            value = source[position:i]
-
-            return (
-                _token(BOOLEAN_LITERAL, value, line, column),
-                i - position
-            )
-
-    return None
+# Dispatch
 
 
-# Função que será a principal
+_DISPATCH = {
+    **{digit: _recognize_number for digit in DIGITS},
+    '"': _recognize_string,
+    "t": _recognize_boolean,
+    "f": _recognize_boolean,
+}
+
+
+# Função Pública
 
 
 def recognize(source: str, position: int, line: int = 1, column: int = 1):
-    """
-    Ela reconhece números, strings e literais booleanos.
-
-    e vai retornar (token, consumed) ou None se não reconhecer.
-    """
-
-    if position < 0 or position >= len(source):
+    if not 0 <= position < len(source):
         return None
 
-    char = source[position]
+    recognizer = _DISPATCH.get(source[position])
 
-    if char == '"':
-        return _recognize_string(source, position, line, column)
+    if recognizer is None:
+        return None
 
-    if char in DIGITS:
-        return _recognize_number(source, position, line, column)
-
-    if char in ("t", "f"):
-        return _recognize_boolean(source, position, line, column)
-
-    return None
+    return recognizer(source, position, line, column)
