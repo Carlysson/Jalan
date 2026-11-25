@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from string import ascii_letters, digits
 from typing import Callable, NamedTuple, Optional
 
+# Constantes
 
 INTEGER_LITERAL = "INTEGER_LITERAL"
 DECIMAL_LITERAL = "DECIMAL_LITERAL"
@@ -19,6 +20,8 @@ BOOLEAN_LITERAL = "BOOLEAN_LITERAL"
 DIGITS = frozenset(digits)
 IDENTIFIER_CHARS = frozenset(ascii_letters + digits + "_")
 VALID_ESCAPES = frozenset('"\\ntr')
+
+# Classificadores de caracteres
 
 
 def _number_class(_state, char):
@@ -46,6 +49,7 @@ def _string_class(state, char):
 def _boolean_class(_state, char):
     return char
 
+# Estrutura dos AFDs
 
 @dataclass(frozen=True)
 class AFD:
@@ -55,7 +59,7 @@ class AFD:
     start: str = "q0"
 
 
-# AFD dos inteiros
+# AFD dos Inteiros
 
 
 INTEGER_AFD = AFD(
@@ -66,8 +70,6 @@ INTEGER_AFD = AFD(
     accepting=frozenset({"q1"}),
     classify=_number_class,
 )
-
-
 
 # AFD dos Decimais
 
@@ -83,7 +85,6 @@ DECIMAL_AFD = AFD(
     accepting=frozenset({"q3"}),
     classify=_number_class,
 )
-
 
 
 # AFD das Strings
@@ -102,27 +103,26 @@ STRING_AFD = AFD(
 )
 
 
-# AFD dos booleanos
+# AFD dos Booleanos
 
 
 BOOLEAN_AFD = AFD(
     transitions={
         ("q0", "t"): "q1",
         ("q1", "r"): "q2",
-        ("q2", "u"): "q3",
-        ("q3", "e"): "qf",
+        ("q2", "u"): "q37",
+        ("q37", "e"): "qf",
 
         ("q0", "f"): "q4",
         ("q4", "a"): "q5",
         ("q5", "l"): "q6",
-        ("q6", "s"): "q7",
-        ("q7", "e"): "qf",
+        ("q6", "s"): "q37",
     },
     accepting=frozenset({"qf"}),
     classify=_boolean_class,
 )
 
-# Executor genérico dos AFDs
+# Executor genéricos dos AFDs
 
 
 class RunResult(NamedTuple):
@@ -153,7 +153,7 @@ def _run_afd(afd: AFD, source: str, position: int) -> RunResult:
     return RunResult(state, last_accept)
 
 
-# Funções auxiliares
+# Funções Auxiliares
 
 
 def _token(type_, value, line, column):
@@ -229,8 +229,7 @@ def _recognize_string(source, position, line, column):
     )
 
 
-# Reconhecimento dos booleanos
-
+# Reconhecimento dos Booleanos
 
 def _recognize_boolean(source, position, line, column):
     result = _run_afd(BOOLEAN_AFD, source, position)
@@ -249,7 +248,6 @@ def _recognize_boolean(source, position, line, column):
 
 # Dispatch
 
-
 _DISPATCH = {
     **{digit: _recognize_number for digit in DIGITS},
     '"': _recognize_string,
@@ -257,9 +255,7 @@ _DISPATCH = {
     "f": _recognize_boolean,
 }
 
-
 # Função Pública
-
 
 def recognize(source: str, position: int, line: int = 1, column: int = 1):
     if not 0 <= position < len(source):

@@ -5,8 +5,7 @@ import pytest
 from src.literals import recognize
 
 
-
-# INTEIROS
+# Teste dos Inteiros
 
 
 @pytest.mark.parametrize("source", [
@@ -48,8 +47,7 @@ def test_inteiro_deve_parar_antes_de_um_delimitador():
     assert consumed == 3
 
 
-
-# DECIMAIS
+# Teste dos Decimais
 
 
 @pytest.mark.parametrize("source", [
@@ -93,7 +91,7 @@ def test_decimal_deve_parar_antes_de_um_operador():
 
 
 
-# STRINGS
+# Teste das Strings
 
 
 @pytest.mark.parametrize("source", [
@@ -178,7 +176,7 @@ def test_nao_deve_reconhecer_booleanos_invalidos(source):
 
 
 
-# POSIÇÃO E METADADOS
+# Posições e Metadados
 
 
 def test_deve_retornar_none_quando_posicao_estiver_no_final():
