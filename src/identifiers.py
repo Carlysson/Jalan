@@ -11,7 +11,8 @@ KEYWORDS = {
 }
 
 
-LETTERS = set(string.ascii_letters) | set("_") 
+BOOLEANS = {"true", "false"} # tratados em literals.py
+LETTERS = set(string.ascii_letters) | set("_")
 DIGITS = set(string.digits)
 
 def _symbol_class(char):
@@ -65,5 +66,9 @@ def recognize(source: str, position: int, line: int = 1, column: int = 1):
         return None
 
     lexema = source[position:i]
+
+    if lexema in BOOLEANS:
+        return None
+    
     tipo = KEYWORD if lexema in KEYWORDS else IDENTIFIER
     return _token(tipo, lexema, line, column), len(lexema)

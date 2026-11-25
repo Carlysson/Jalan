@@ -60,3 +60,34 @@ def test_deve_preservar_linha_e_coluna():
 
     assert token ["line"] == 4
     assert token ["column"] == 8
+
+
+@pytest.mark.parametrize("source", ["true", "false"])
+def test_nao_deve_reconhecer_booleanos(source):
+    assert recognize(source, 0, 1, 1) is None
+
+
+@pytest.mark.parametrize("source", ["trueish", "false1", "_true", "True"])
+def test_deve_reconhecer_como_identificador_se_nao_for_booleano_exato(source):
+    token, consumed = recognize(source, 0, 1, 1)
+
+    assert token["type"] == "IDENTIFIER"
+    assert consumed == len(source)
+
+
+@pytest.mark.parametrize("source", ["If", "WHILE", "Show"])
+def test_palavra_reservada_maiuscula_e_identificador(source):
+    token, _ = recognize(source, 0, 1, 1)
+    assert token["type"] == "IDENTIFIER"
+
+
+def test_deve_parar_antes_de_parenteses():
+    token, consumed = recognize("show(x)", 0, 1, 1)
+    assert token["type"] == "KEYWORD"
+    assert consumed == 4
+
+
+def test_deve_parar_antes_de_quebra_de_linha():
+    token, consumed = recognize("abc\ndef", 0, 1, 1)
+    assert token["value"] == "abc"
+    assert consumed == 3
